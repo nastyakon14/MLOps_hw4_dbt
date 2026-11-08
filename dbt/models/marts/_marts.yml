@@ -1,0 +1,392 @@
+version: 2
+
+models:
+  - name: mart_daily_state_metrics
+    description: >
+      Дневные метрики по штатам: число операций, оборот, средний чек,
+      95-й перцентиль суммы и доля крупных транзакций.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_date, us_state]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: 1
+            max_value: 100000
+    columns:
+      - name: metric_date
+        description: День агрегации.
+        tests:
+          - not_null
+      - name: us_state
+        description: Штат клиента.
+        tests:
+          - not_null
+      - name: txn_count
+        description: Число транзакций.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: fraud_count
+        description: Число мошеннических транзакций.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Сумма операций за день в штате.
+        tests:
+          - not_null
+      - name: avg_amount
+        description: Средний чек.
+        tests:
+          - not_null
+      - name: p95_amount
+        description: Точный 95-й перцентиль суммы.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: fraud_rate
+        description: Доля фрода в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: large_txn_share
+        description: Доля транзакций с суммой от 100, в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+
+  - name: mart_fraud_by_category
+    description: >
+      Фрод по категориям покупок. fraud_rank = 1 у категории с наибольшей долей фрода.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 14
+    columns:
+      - name: cat_id
+        description: Категория покупки.
+        tests:
+          - not_null
+          - unique
+          - dbt_expectations.expect_column_distinct_count_to_equal:
+              arguments:
+                value: 14
+      - name: txn_count
+        description: Число транзакций категории.
+        tests:
+          - not_null
+      - name: fraud_count
+        description: Число фродовых транзакций.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Оборот категории.
+        tests:
+          - not_null
+      - name: fraud_amount
+        description: Сумма фродовых операций.
+        tests:
+          - not_null
+      - name: avg_amount
+        description: Средний чек категории.
+        tests:
+          - not_null
+      - name: fraud_rate
+        description: Доля фрода в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: fraud_rank
+        description: Ранг категории по убыванию fraud_rate.
+        tests:
+          - not_null
+          - unique
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 14
+                inclusive: true
+
+  - name: mart_fraud_by_state
+    description: >
+      География фрода. К коду штата добавлены название и регион Census,
+      уникальные клиенты и мерчанты.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+    columns:
+      - name: us_state
+        description: Код штата.
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('states')
+                field: state_code
+      - name: state_name
+        description: Название штата из справочника.
+        tests:
+          - not_null
+      - name: census_region
+        description: Регион Census.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Northeast", "Midwest", "South", "West"]
+      - name: txn_count
+        description: Число транзакций.
+        tests:
+          - not_null
+      - name: fraud_count
+        description: Число фродовых транзакций.
+        tests:
+          - not_null
+      - name: unique_customers
+        description: Число уникальных клиентов.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: unique_merchants
+        description: Число уникальных мерчантов.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Оборот в штате.
+        tests:
+          - not_null
+      - name: fraud_amount
+        description: Сумма фродовых операций.
+        tests:
+          - not_null
+      - name: fraud_rate
+        description: Доля фрода в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+
+  - name: mart_customer_risk_profile
+    description: >
+      Профиль риска клиента. HIGH — доля фрода от 20%.
+      MEDIUM — фрод был, но доля ниже 20%. LOW — фрода не было.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+    columns:
+      - name: customer_id
+        description: Ключ клиента.
+        tests:
+          - not_null
+          - unique
+      - name: first_name
+        description: Имя.
+        tests:
+          - not_null
+      - name: last_name
+        description: Фамилия.
+        tests:
+          - not_null
+      - name: gender
+        description: Пол.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["M", "F"]
+      - name: us_state
+        description: Штат клиента.
+        tests:
+          - not_null
+      - name: txn_count
+        description: Число транзакций клиента.
+        tests:
+          - not_null
+      - name: fraud_count
+        description: Число фродовых транзакций клиента.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Сумма всех операций клиента.
+        tests:
+          - not_null
+      - name: avg_amount
+        description: Средний чек клиента.
+        tests:
+          - not_null
+      - name: first_transaction_at
+        description: Время первой операции.
+        tests:
+          - not_null
+      - name: last_transaction_at
+        description: Время последней операции.
+        tests:
+          - not_null
+      - name: fraud_rate
+        description: Доля фрода клиента в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: risk_segment
+        description: Сегмент риска HIGH, MEDIUM или LOW.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["HIGH", "MEDIUM", "LOW"]
+          - dbt_expectations.expect_column_values_to_be_in_set:
+              arguments:
+                value_set: ["HIGH", "MEDIUM", "LOW"]
+
+  - name: mart_hourly_fraud_pattern
+    description: >
+      Фрод по дню недели и часу. is_elevated_risk = 1, если в ячейке есть фрод,
+      транзакций не меньше hourly_min_transactions и доля фрода хотя бы в
+      hourly_risk_multiplier раз выше средней по всем ячейкам.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [day_of_week, hour_of_day]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+    columns:
+      - name: day_of_week
+        description: День недели, понедельник = 1.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 7
+      - name: day_name
+        description: Название дня недели.
+        tests:
+          - not_null
+      - name: hour_of_day
+        description: Час, от 0 до 23.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 23
+      - name: txn_count
+        description: Число транзакций в ячейке.
+        tests:
+          - not_null
+      - name: fraud_count
+        description: Число фродовых транзакций.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Оборот ячейки.
+        tests:
+          - not_null
+      - name: fraud_rate
+        description: Доля фрода в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: is_elevated_risk
+        description: 1, если ячейка — окно повышенного риска.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+
+  - name: mart_merchant_analytics
+    description: >
+      Метрики мерчанта. is_suspicious = 1, если фродовых операций не меньше 3
+      и их доля не ниже 2%.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fraud_count <= txn_count"
+    columns:
+      - name: merch
+        description: Мерчант.
+        tests:
+          - not_null
+          - unique
+      - name: category
+        description: Категория, в которой у мерчанта больше всего транзакций.
+        tests:
+          - not_null
+      - name: txn_count
+        description: Число транзакций.
+        tests:
+          - not_null
+      - name: fraud_count
+        description: Число фродовых транзакций.
+        tests:
+          - not_null
+      - name: unique_customers
+        description: Число уникальных клиентов.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Оборот мерчанта.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: avg_amount
+        description: Средний чек.
+        tests:
+          - not_null
+      - name: fraud_rate
+        description: Доля фрода в процентах.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: is_suspicious
+        description: 1, если мерчант проходит порог подозрительности.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false

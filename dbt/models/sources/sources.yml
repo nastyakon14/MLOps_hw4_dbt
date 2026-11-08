@@ -1,0 +1,75 @@
+version: 2
+
+sources:
+  - name: transactions_db
+    description: Сырые транзакции из домашнего задания по ClickHouse.
+    schema: transactions_db
+    tables:
+      - name: transactions
+        description: >
+          Журнал карточных операций. Одна строка — одна транзакция.
+          target = 1 означает фрод, target = 0 — обычную оплату.
+        columns:
+          - name: transaction_time
+            description: Момент операции.
+            tests:
+              - not_null
+          - name: merch
+            description: Название мерчанта.
+            tests:
+              - not_null
+          - name: cat_id
+            description: Категория покупки. В датасете 14 значений.
+            tests:
+              - not_null
+          - name: amount
+            description: Сумма операции.
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  arguments:
+                    min_value: 0
+                    inclusive: true
+          - name: name_1
+            description: Имя клиента.
+            tests:
+              - not_null
+          - name: name_2
+            description: Фамилия клиента.
+            tests:
+              - not_null
+          - name: gender
+            description: Пол клиента, M или F.
+            tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: ["M", "F"]
+          - name: us_state
+            description: Штат клиента, код USPS. В данных также есть DC.
+            tests:
+              - not_null
+          - name: lat
+            description: Широта клиента.
+            tests:
+              - not_null
+          - name: lon
+            description: Долгота клиента.
+            tests:
+              - not_null
+          - name: merchant_lat
+            description: Широта мерчанта.
+            tests:
+              - not_null
+          - name: merchant_lon
+            description: Долгота мерчанта.
+            tests:
+              - not_null
+          - name: target
+            description: Признак фрода. 1 — мошенничество, 0 — нет.
+            tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [0, 1]
+                    quote: false

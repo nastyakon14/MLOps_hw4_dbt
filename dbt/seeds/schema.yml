@@ -1,0 +1,30 @@
+version: 2
+
+seeds:
+  - name: states
+    description: Пятьдесят штатов США и округ Колумбия с регионом Census.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 51
+    columns:
+      - name: state_code
+        description: Код USPS.
+        tests:
+          - not_null
+          - unique
+      - name: state_name
+        description: Полное название штата.
+        tests:
+          - not_null
+          - unique
+      - name: census_region
+        description: Регион Бюро переписи — Northeast, Midwest, South или West.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Northeast", "Midwest", "South", "West"]
+          - dbt_expectations.expect_column_values_to_be_in_set:
+              arguments:
+                value_set: ["Northeast", "Midwest", "South", "West"]

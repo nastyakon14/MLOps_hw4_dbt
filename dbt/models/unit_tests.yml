@@ -1,0 +1,330 @@
+version: 2
+
+unit_tests:
+  - name: test_amount_buckets_and_calendar
+    model: stg_transactions
+    given:
+      - input: source('transactions_db', 'transactions')
+        format: sql
+        rows: |
+          select
+              toDateTime('2019-01-15 13:05:00') as transaction_time,
+              'fraud_test_shop' as merch,
+              'grocery_pos' as cat_id,
+              toFloat64(9) as amount,
+              'Ann' as name_1,
+              'Lee' as name_2,
+              'F' as gender,
+              'CA' as us_state,
+              toFloat64(34.05) as lat,
+              toFloat64(-118.25) as lon,
+              toFloat64(34.06) as merchant_lat,
+              toFloat64(-118.24) as merchant_lon,
+              toUInt8(0) as target
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(10),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(49),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(50),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(1)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(99),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(100),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(499),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+          union all
+          select
+              toDateTime('2019-01-15 13:05:00'),
+              'fraud_test_shop',
+              'grocery_pos',
+              toFloat64(500),
+              'Ann',
+              'Lee',
+              'F',
+              'CA',
+              toFloat64(34.05),
+              toFloat64(-118.25),
+              toFloat64(34.06),
+              toFloat64(-118.24),
+              toUInt8(0)
+    expect:
+      rows:
+        - {amount: 9, amount_bucket: xs, is_large_transaction: 0, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 10, amount_bucket: s, is_large_transaction: 0, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 49, amount_bucket: s, is_large_transaction: 0, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 50, amount_bucket: m, is_large_transaction: 0, is_fraud: 1, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 99, amount_bucket: m, is_large_transaction: 0, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 100, amount_bucket: l, is_large_transaction: 1, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 499, amount_bucket: l, is_large_transaction: 1, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+        - {amount: 500, amount_bucket: xl, is_large_transaction: 1, is_fraud: 0, transaction_hour: 13, day_of_week: 2, day_name: Tuesday}
+
+  - name: test_customer_risk_segments
+    model: mart_customer_risk_profile
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              'cust_low' as customer_id,
+              'Ann' as name_1,
+              'Lee' as name_2,
+              'F' as gender,
+              'CA' as us_state,
+              toFloat64(15) as amount,
+              toUInt8(0) as is_fraud,
+              toDateTime('2019-01-10 09:00:00') as transaction_time
+          from numbers(2)
+          union all
+          select
+              'cust_medium',
+              'Bob',
+              'Kim',
+              'M',
+              'NY',
+              toFloat64(20),
+              if(number = 0, toUInt8(1), toUInt8(0)),
+              toDateTime('2019-02-10 10:00:00')
+          from numbers(6)
+          union all
+          select
+              'cust_high',
+              'Cara',
+              'Ng',
+              'F',
+              'TX',
+              toFloat64(40),
+              if(number = 0, toUInt8(1), toUInt8(0)),
+              toDateTime('2019-03-10 11:00:00')
+          from numbers(4)
+    expect:
+      rows:
+        - {customer_id: cust_low, first_name: Ann, txn_count: 2, fraud_count: 0, fraud_rate: 0, risk_segment: LOW}
+        - {customer_id: cust_medium, first_name: Bob, txn_count: 6, fraud_count: 1, fraud_rate: 16.67, risk_segment: MEDIUM}
+        - {customer_id: cust_high, first_name: Cara, txn_count: 4, fraud_count: 1, fraud_rate: 25, risk_segment: HIGH}
+
+  - name: test_daily_large_transaction_share
+    model: mart_daily_state_metrics
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              toDate('2019-01-15') as transaction_date,
+              'CA' as us_state,
+              toFloat64(50) as amount,
+              toUInt8(0) as is_large_transaction,
+              toUInt8(0) as is_fraud
+          union all
+          select
+              toDate('2019-01-15'),
+              'CA',
+              toFloat64(150),
+              toUInt8(1),
+              toUInt8(0)
+    expect:
+      rows:
+        - {metric_date: "2019-01-15", us_state: CA, txn_count: 2, fraud_count: 0, total_amount: 200, avg_amount: 100, large_txn_share: 50}
+
+  - name: test_fraud_rank_by_category
+    model: mart_fraud_by_category
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              'grocery_pos' as cat_id,
+              toFloat64(10) as amount,
+              toUInt8(1) as is_fraud
+          from numbers(2)
+          union all
+          select
+              'grocery_pos',
+              toFloat64(10),
+              toUInt8(0)
+          from numbers(2)
+          union all
+          select
+              'home',
+              toFloat64(5),
+              toUInt8(0)
+          from numbers(4)
+    expect:
+      rows:
+        - {cat_id: grocery_pos, txn_count: 4, fraud_count: 2, fraud_amount: 20, fraud_rate: 50, fraud_rank: 1}
+        - {cat_id: home, txn_count: 4, fraud_count: 0, fraud_amount: 0, fraud_rate: 0, fraud_rank: 2}
+
+  - name: test_state_fraud_joins_reference
+    model: mart_fraud_by_state
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              'CA' as us_state,
+              'cust1' as customer_id,
+              'm1' as merch,
+              toFloat64(10) as amount,
+              toUInt8(1) as is_fraud
+          union all
+          select 'CA', 'cust2', 'm2', toFloat64(30), toUInt8(0)
+          union all
+          select 'NY', 'cust3', 'm1', toFloat64(40), toUInt8(0)
+      - input: ref('states')
+        format: sql
+        rows: |
+          select
+              'CA' as state_code,
+              'California' as state_name,
+              'West' as census_region
+          union all
+          select 'NY', 'New York', 'Northeast'
+          union all
+          select 'TX', 'Texas', 'South'
+    expect:
+      rows:
+        - {us_state: CA, state_name: California, census_region: West, txn_count: 2, fraud_count: 1, unique_customers: 2, unique_merchants: 2, total_amount: 40, fraud_amount: 10, fraud_rate: 50}
+        - {us_state: NY, state_name: New York, census_region: Northeast, txn_count: 1, fraud_count: 0, unique_customers: 1, unique_merchants: 1, total_amount: 40, fraud_amount: 0, fraud_rate: 0}
+
+  - name: test_hourly_elevated_window
+    model: mart_hourly_fraud_pattern
+    overrides:
+      vars:
+        hourly_min_transactions: 2
+        hourly_risk_multiplier: 1.5
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              toUInt8(2) as day_of_week,
+              'Tuesday' as day_name,
+              toUInt8(10) as transaction_hour,
+              toFloat64(10) as amount,
+              toUInt8(0) as is_fraud
+          from numbers(4)
+          union all
+          select
+              toUInt8(2),
+              'Tuesday',
+              toUInt8(22),
+              toFloat64(50),
+              toUInt8(1)
+          from numbers(2)
+    expect:
+      rows:
+        - {day_of_week: 2, hour_of_day: 10, txn_count: 4, fraud_count: 0, fraud_rate: 0, is_elevated_risk: 0}
+        - {day_of_week: 2, hour_of_day: 22, txn_count: 2, fraud_count: 2, fraud_rate: 100, is_elevated_risk: 1}
+
+  - name: test_merchant_suspicious_flag
+    model: mart_merchant_analytics
+    given:
+      - input: ref('stg_transactions')
+        format: sql
+        rows: |
+          select
+              'safe_shop' as merch,
+              'home' as cat_id,
+              'c1' as customer_id,
+              toFloat64(10) as amount,
+              toUInt8(0) as is_fraud
+          from numbers(5)
+          union all
+          select
+              'risky_shop',
+              'shopping_net',
+              'c2',
+              toFloat64(80),
+              if(number < 3, toUInt8(1), toUInt8(0))
+          from numbers(10)
+          union all
+          select
+              'tiny_shop',
+              'travel',
+              'c3',
+              toFloat64(40),
+              toUInt8(1)
+          from numbers(2)
+    expect:
+      rows:
+        - {merch: safe_shop, category: home, txn_count: 5, fraud_count: 0, fraud_rate: 0, is_suspicious: 0}
+        - {merch: risky_shop, category: shopping_net, txn_count: 10, fraud_count: 3, fraud_rate: 30, is_suspicious: 1}
+        - {merch: tiny_shop, category: travel, txn_count: 2, fraud_count: 2, fraud_rate: 100, is_suspicious: 0}

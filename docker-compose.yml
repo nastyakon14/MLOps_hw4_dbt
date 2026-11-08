@@ -1,0 +1,19 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: hw4-clickhouse
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: dbt
+    ports:
+      - "127.0.0.1:8123:8123"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--password", "dbt", "--query", "SELECT 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s

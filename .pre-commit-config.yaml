@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: sqlfluff-lint
+        name: sqlfluff-lint
+        entry: scripts/sqlfluff_hook.sh lint
+        language: system
+        files: ^dbt/(models|tests)/.+\.sql$
+        pass_filenames: true
+      - id: sqlfluff-fix
+        name: sqlfluff-fix
+        entry: scripts/sqlfluff_hook.sh fix
+        language: system
+        files: ^dbt/(models|tests)/.+\.sql$
+        pass_filenames: true
